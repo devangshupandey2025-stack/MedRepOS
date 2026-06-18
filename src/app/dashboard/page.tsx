@@ -9,9 +9,21 @@ import {
   getTargetVsSalesByHQ,
   getExecutiveSummary,
 } from "@/lib/analytics";
+import {
+  getProjectedAchievement,
+  getRisks,
+  getOpportunities,
+  getHealthScore,
+  generateBrief,
+} from "@/lib/intelligence";
 import { MetricsCard } from "@/components/dashboard/metrics-card";
 import { ExecutiveSummaryCard } from "@/components/dashboard/executive-summary";
 import { EmptyState } from "@/components/dashboard/empty-state";
+import { ProjectedAchievementCard } from "@/components/dashboard/projected-achievement";
+import { RisksPanel } from "@/components/dashboard/risks-panel";
+import { OpportunitiesPanel } from "@/components/dashboard/opportunities-panel";
+import { HealthScoreCard } from "@/components/dashboard/health-score";
+import { ExecutiveBriefCard } from "@/components/dashboard/executive-brief";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { TargetVsSalesChart } from "@/components/charts/target-vs-sales-chart";
 import { HQRankingChart } from "@/components/charts/hq-ranking-chart";
@@ -44,6 +56,11 @@ export default async function DashboardPage() {
     distribution,
     targetVsSales,
     executiveSummary,
+    projection,
+    risks,
+    opportunities,
+    health,
+    brief,
   ] = await Promise.all([
     getDashboardMetrics(),
     getTopHQs(10),
@@ -51,6 +68,11 @@ export default async function DashboardPage() {
     getAchievementDistribution(),
     getTargetVsSalesByHQ(10),
     getExecutiveSummary(),
+    getProjectedAchievement(),
+    getRisks(),
+    getOpportunities(),
+    getHealthScore(),
+    generateBrief(),
   ]);
 
   return (
@@ -117,6 +139,19 @@ export default async function DashboardPage() {
           icon={Database}
           gradient="gradient-cyan"
         />
+      </div>
+
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
+        {projection && <ProjectedAchievementCard data={projection} />}
+        <HealthScoreCard data={health} />
+        <div className="lg:col-span-1">
+          <ExecutiveBriefCard data={brief} />
+        </div>
+      </div>
+
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+        <RisksPanel data={risks} />
+        <OpportunitiesPanel data={opportunities} />
       </div>
 
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">

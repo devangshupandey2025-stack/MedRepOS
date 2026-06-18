@@ -87,3 +87,51 @@ export interface UploadBatchInfo {
   recordsCount: number
   uploadedAt: Date
 }
+
+export interface ProjectedAchievement {
+  currentAchievement: number
+  projectedAchievement: number
+  elapsedDays: number
+  totalDays: number
+  currentSales: number
+  projectedSales: number
+  totalTarget: number
+}
+
+export interface HQRisk {
+  hqCode: string
+  hqName: string
+  achievement: number
+  growth: number
+  targetGap: number
+  status: "Critical" | "Declining" | "At Risk"
+  reasons: string[]
+}
+
+export interface HQOpportunity {
+  hqCode: string
+  hqName: string
+  achievement: number
+  growth: number
+  sales: number
+  recommendation: string
+}
+
+export interface HealthScore {
+  overall: number
+  achievement: number
+  growth: number
+  coverage: number
+  forecast: number
+}
+
+export interface BriefSection {
+  title: string
+  content: string
+  type: "positive" | "negative" | "neutral"
+}
+
+export interface ExecutiveBrief {
+  summary: string
+  sections: BriefSection[]
+}
