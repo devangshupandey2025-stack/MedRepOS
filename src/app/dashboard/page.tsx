@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { shouldShowData, isDemoMode } from "@/lib/demo";
 import {
   getDashboardMetrics,
   getTopHQs,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/analytics";
 import { MetricsCard } from "@/components/dashboard/metrics-card";
 import { ExecutiveSummaryCard } from "@/components/dashboard/executive-summary";
+import { EmptyState } from "@/components/dashboard/empty-state";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { TargetVsSalesChart } from "@/components/charts/target-vs-sales-chart";
 import { HQRankingChart } from "@/components/charts/hq-ranking-chart";
@@ -26,9 +28,15 @@ import {
 import { formatCurrency, formatPercent, formatNumber } from "@/lib/utils";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Download } from "lucide-react";
+import { Download, FlaskConical } from "lucide-react";
 
 export default async function DashboardPage() {
+  const showData = await shouldShowData();
+
+  if (!showData) {
+    return <EmptyState />;
+  }
+
   const [
     metrics,
     topHQs,
@@ -48,11 +56,19 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Executive Dashboard</h1>
-          <p className="text-gray-400 mt-1">
-            Pharmaceutical sales performance overview
-          </p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Executive Dashboard</h1>
+            <p className="text-gray-400 mt-1">
+              Pharmaceutical sales performance overview
+            </p>
+          </div>
+          {isDemoMode() && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-900/30 text-amber-400 border border-amber-800/30">
+              <FlaskConical className="h-3 w-3" />
+              Demo Data
+            </span>
+          )}
         </div>
         <Link href="/api/export/excel?type=dashboard">
           <Button variant="outline" size="sm" className="gap-2">
