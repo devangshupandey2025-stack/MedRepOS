@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #030712;
+  --color-card: #111827;
+  --color-border: #1F2937;
+  --color-primary: #2563EB;
+  --color-success: #22C55E;
+  --color-warning: #F59E0B;
+}
+
+body {
+  background: #030712;
+  color: #F3F4F6;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.gradient-blue {
+  background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%);
+}
+
+.gradient-green {
+  background: linear-gradient(135deg, #065F46 0%, #22C55E 100%);
+}
+
+.gradient-purple {
+  background: linear-gradient(135deg, #5B21B6 0%, #8B5CF6 100%);
+}
+
+.gradient-amber {
+  background: linear-gradient(135deg, #92400E 0%, #F59E0B 100%);
+}
+
+.gradient-rose {
+  background: linear-gradient(135deg, #9F1239 0%, #E11D48 100%);
+}
+
+.gradient-cyan {
+  background: linear-gradient(135deg, #0E7490 0%, #06B6D4 100%);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1F2937 transparent;
+}

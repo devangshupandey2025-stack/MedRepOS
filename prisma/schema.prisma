@@ -1,0 +1,39 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model UploadBatch {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  fileName      String
+  fileHash      String   @unique
+  month         String
+  recordsCount  Int
+  uploadedAt    DateTime @default(now())
+}
+
+model SalesRecord {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  hqCode        String
+  hqName        String
+  materialCode  String
+  materialName  String
+  targetAmount  Float
+  salesAmount   Float
+  netSales      Float
+  achievement   Float
+  reportMonth   String
+  uploadedAt    DateTime @default(now())
+  uploadBatchId String   @db.ObjectId
+
+  @@index([hqCode])
+  @@index([hqName])
+  @@index([materialCode])
+  @@index([materialName])
+  @@index([reportMonth])
+  @@index([uploadBatchId])
+}
