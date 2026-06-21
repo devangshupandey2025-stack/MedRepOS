@@ -25,26 +25,22 @@ function cleanCell(v) {
 }
 
 function findHeaderRowIndex(rows) {
+  const HEADER_KEYWORDS = [
+    "hq code", "material code", "target qty", "target amount",
+    "sales qty", "sales amount", "net sales", "net qty",
+    "achievement", "achivement", "sales return",
+  ]
   for (let i = 0; i < Math.min(rows.length, 100); i++) {
     const row = rows[i]
     if (!Array.isArray(row)) continue
-    const combined = row
+    const nonEmpty = row
       .filter((c) => c != null && String(c).trim() !== "")
+    if (nonEmpty.length < 3) continue
+    const combined = nonEmpty
       .map((c) => String(c).trim().toLowerCase())
       .join(" ")
-    if (
-      combined.includes("hq code") ||
-      combined.includes("material code") ||
-      combined.includes("target qty") ||
-      combined.includes("target amount") ||
-      combined.includes("sales qty") ||
-      combined.includes("sales amount") ||
-      combined.includes("net sales") ||
-      combined.includes("achievement") ||
-      combined.includes("achivement")
-    ) {
-      return i
-    }
+    const matches = HEADER_KEYWORDS.filter((kw) => combined.includes(kw))
+    if (matches.length >= 2) return i
   }
   return -1
 }
