@@ -17,27 +17,47 @@ const COLUMN_ALIASES = {
   achievement: ["achievement %", "achievement", "achievement%", "ach %", "ach%", "achivement"],
 }
 
-function isHeaderRow(row) {
-  const vals = Object.values(row).filter((v) => v != null && String(v).trim() !== "")
-  if (vals.length < 3) return false
-  const combined = vals.map((v) => String(v).trim().toLowerCase()).join(" ")
-  return (
-    combined.includes("hq code") ||
-    combined.includes("material code") ||
-    combined.includes("target qty") ||
-    combined.includes("target amount") ||
-    combined.includes("sales qty") ||
-    combined.includes("sales amount") ||
-    combined.includes("achievement")
-  )
+function cleanCell(v) {
+  if (v == null) return ""
+  return String(v).trim()
 }
 
-function findColumn(row, field) {
+function findHeaderRowIndex(rows) {
+  for (let i = 0; i < Math.min(rows.length, 20); i++) {
+    const row = rows[i]
+    if (!Array.isArray(row)) continue
+    const combined = row
+      .filter((c) => c != null && String(c).trim() !== "")
+      .map((c) => String(c).trim().toLowerCase())
+      .join(" ")
+    if (
+      combined.includes("hq code") ||
+      combined.includes("material code") ||
+      combined.includes("target qty") ||
+      combined.includes("sales qty") ||
+      combined.includes("achievement")
+    ) {
+      return i
+    }
+  }
+  return -1
+}
+
+function buildMappedRow(headerRow, dataRow) {
+  const map = {}
+  for (let i = 0; i < headerRow.length; i++) {
+    const key = cleanCell(headerRow[i])
+    if (key) map[key] = dataRow[i] != null ? dataRow[i] : ""
+  }
+  return map
+}
+
+function findColumn(headers, field) {
   const aliases = COLUMN_ALIASES[field]
   if (!aliases) return null
-  for (const key of Object.keys(row)) {
-    const normalized = key.trim().toLowerCase().replace(/\s+/g, " ")
-    if (aliases.includes(normalized)) return key
+  for (const h of headers) {
+    const normalized = h.trim().toLowerCase().replace(/\s+/g, " ")
+    if (aliases.includes(normalized)) return h
   }
   return null
 }
@@ -59,65 +79,83 @@ export async function importReport(req, res) {
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" })
     const sheetName = workbook.SheetNames[0]
     const sheet = workbook.Sheets[sheetName]
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: null })
+    const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null })
 
-    if (rows.length === 0) {
+    if (raw.length === 0) {
       return res.status(400).json({ error: "File is empty" })
     }
 
-    let headerRow = null
-    let dataStartIndex = 0
+    const headerIndex = findHeaderRowIndex(raw)
 
-    for (let i = 0; i < Math.min(rows.length, 10); i++) {
-      if (isHeaderRow(rows[i])) {
-        headerRow = rows[i]
-        dataStartIndex = i + 1
-        break
-      }
-    }
-
-    if (!headerRow) {
-      const actualCols = Object.keys(rows[0]).map((k) => JSON.stringify(k.trim())).join(", ")
+    if (headerIndex === -1) {
+      const preview = raw
+        .slice(0, 3)
+        .map((r, idx) => `Row ${idx}: [${(r || []).slice(0, 5).map((c) => JSON.stringify(c)).join(", ")}${(r || []).length > 5 ? ", ..." : ""}]`)
+        .join("; ")
       return res.status(400).json({
-        error: `Could not find header row with expected columns (e.g. "HQ Code", "Material Code"). Found columns in first row: ${actualCols}`,
+        error: `Could not find header row with expected columns (e.g. "HQ Code", "Material Code"). First rows: ${preview}`,
       })
     }
 
-    const foundHqCode = findColumn(headerRow, "hqCode")
-    const foundMatCode = findColumn(headerRow, "materialCode")
+    const headerRow = raw[headerIndex]
+    const headers = headerRow.map((c) => cleanCell(c)).filter(Boolean)
+
+    const foundHqCode = findColumn(headers, "hqCode")
+    const foundMatCode = findColumn(headers, "materialCode")
 
     if (!foundHqCode || !foundMatCode) {
-      const actualCols = Object.keys(headerRow).map((k) => JSON.stringify(k.trim())).join(", ")
       return res.status(400).json({
-        error: `Could not find required columns in header row. Found: ${actualCols}`,
+        error: `Could not find required columns in header row. Found: ${JSON.stringify(headers)}`,
       })
     }
 
-    const col = (field) => findColumn(headerRow, field)
+    const headerKeyIndex = (name) => {
+      for (let i = 0; i < headerRow.length; i++) {
+        const normalized = cleanCell(headerRow[i]).toLowerCase().replace(/\s+/g, " ")
+        if (COLUMN_ALIASES[name]?.includes(normalized)) return i
+      }
+      return -1
+    }
+
+    const hqCodeIdx = headerKeyIndex("hqCode")
+    const hqNameIdx = headerKeyIndex("hqName")
+    const matCodeIdx = headerKeyIndex("materialCode")
+    const matNameIdx = headerKeyIndex("materialName")
+    const targetQtyIdx = headerKeyIndex("targetQty")
+    const targetAmtIdx = headerKeyIndex("targetAmount")
+    const salesQtyIdx = headerKeyIndex("salesQty")
+    const salesAmtIdx = headerKeyIndex("salesAmount")
+    const srQtyIdx = headerKeyIndex("salesReturnQty")
+    const srAmtIdx = headerKeyIndex("salesReturnAmount")
+    const netQtyIdx = headerKeyIndex("netQty")
+    const netSalesIdx = headerKeyIndex("netSales")
+    const achIdx = headerKeyIndex("achievement")
 
     const docs = []
 
-    for (let i = dataStartIndex; i < rows.length; i++) {
-      const row = rows[i]
-      const hqCode = String(row[foundHqCode] ?? "").trim()
-      const materialCode = String(row[foundMatCode] ?? "").trim()
+    for (let i = headerIndex + 1; i < raw.length; i++) {
+      const row = raw[i]
+      if (!Array.isArray(row)) continue
+
+      const hqCode = cleanCell(row[hqCodeIdx])
+      const materialCode = cleanCell(row[matCodeIdx])
 
       if (!hqCode || !materialCode) continue
 
       docs.push({
         hqCode,
-        hqName: String(row[col("hqName")] ?? "").trim(),
+        hqName: hqNameIdx >= 0 ? cleanCell(row[hqNameIdx]) : "",
         materialCode,
-        materialName: String(row[col("materialName")] ?? "").trim(),
-        targetQty: cleanNum(row[col("targetQty")]),
-        targetAmount: cleanNum(row[col("targetAmount")]),
-        salesQty: cleanNum(row[col("salesQty")]),
-        salesAmount: cleanNum(row[col("salesAmount")]),
-        salesReturnQty: cleanNum(row[col("salesReturnQty")]),
-        salesReturnAmount: cleanNum(row[col("salesReturnAmount")]),
-        netQty: cleanNum(row[col("netQty")]),
-        netSales: cleanNum(row[col("netSales")]),
-        achievement: cleanNum(row[col("achievement")]),
+        materialName: matNameIdx >= 0 ? cleanCell(row[matNameIdx]) : "",
+        targetQty: targetQtyIdx >= 0 ? cleanNum(row[targetQtyIdx]) : 0,
+        targetAmount: targetAmtIdx >= 0 ? cleanNum(row[targetAmtIdx]) : 0,
+        salesQty: salesQtyIdx >= 0 ? cleanNum(row[salesQtyIdx]) : 0,
+        salesAmount: salesAmtIdx >= 0 ? cleanNum(row[salesAmtIdx]) : 0,
+        salesReturnQty: srQtyIdx >= 0 ? cleanNum(row[srQtyIdx]) : 0,
+        salesReturnAmount: srAmtIdx >= 0 ? cleanNum(row[srAmtIdx]) : 0,
+        netQty: netQtyIdx >= 0 ? cleanNum(row[netQtyIdx]) : 0,
+        netSales: netSalesIdx >= 0 ? cleanNum(row[netSalesIdx]) : 0,
+        achievement: achIdx >= 0 ? cleanNum(row[achIdx]) : 0,
         importedAt: new Date(),
         uploadedBy: req.user?._id,
       })
