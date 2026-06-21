@@ -17,6 +17,21 @@ const COLUMN_ALIASES = {
   achievement: ["achievement %", "achievement", "achievement%", "ach %", "ach%", "achivement"],
 }
 
+function isHeaderRow(row) {
+  const vals = Object.values(row).filter((v) => v != null && String(v).trim() !== "")
+  if (vals.length < 3) return false
+  const combined = vals.map((v) => String(v).trim().toLowerCase()).join(" ")
+  return (
+    combined.includes("hq code") ||
+    combined.includes("material code") ||
+    combined.includes("target qty") ||
+    combined.includes("target amount") ||
+    combined.includes("sales qty") ||
+    combined.includes("sales amount") ||
+    combined.includes("achievement")
+  )
+}
+
 function findColumn(row, field) {
   const aliases = COLUMN_ALIASES[field]
   if (!aliases) return null
@@ -50,22 +65,40 @@ export async function importReport(req, res) {
       return res.status(400).json({ error: "File is empty" })
     }
 
-    const firstRow = rows[0]
-    const foundHqCode = findColumn(firstRow, "hqCode")
-    const foundMatCode = findColumn(firstRow, "materialCode")
+    let headerRow = null
+    let dataStartIndex = 0
 
-    if (!foundHqCode || !foundMatCode) {
-      const actualCols = Object.keys(firstRow).map((k) => JSON.stringify(k.trim())).join(", ")
+    for (let i = 0; i < Math.min(rows.length, 10); i++) {
+      if (isHeaderRow(rows[i])) {
+        headerRow = rows[i]
+        dataStartIndex = i + 1
+        break
+      }
+    }
+
+    if (!headerRow) {
+      const actualCols = Object.keys(rows[0]).map((k) => JSON.stringify(k.trim())).join(", ")
       return res.status(400).json({
-        error: `Could not find required columns. Expected columns like "HQ Code" and "Material Code". Found columns: ${actualCols}`,
+        error: `Could not find header row with expected columns (e.g. "HQ Code", "Material Code"). Found columns in first row: ${actualCols}`,
       })
     }
 
-    const col = (field) => findColumn(firstRow, field)
+    const foundHqCode = findColumn(headerRow, "hqCode")
+    const foundMatCode = findColumn(headerRow, "materialCode")
+
+    if (!foundHqCode || !foundMatCode) {
+      const actualCols = Object.keys(headerRow).map((k) => JSON.stringify(k.trim())).join(", ")
+      return res.status(400).json({
+        error: `Could not find required columns in header row. Found: ${actualCols}`,
+      })
+    }
+
+    const col = (field) => findColumn(headerRow, field)
 
     const docs = []
 
-    for (const row of rows) {
+    for (let i = dataStartIndex; i < rows.length; i++) {
+      const row = rows[i]
       const hqCode = String(row[foundHqCode] ?? "").trim()
       const materialCode = String(row[foundMatCode] ?? "").trim()
 
