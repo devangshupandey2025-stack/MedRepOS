@@ -9,14 +9,14 @@ const COLUMN_ALIASES = {
   materialCode: ["material code", "materialcode", "product code", "item code", "sku"],
   materialName: ["material name", "materialname", "product name", "item name"],
   targetQty: ["target qty", "targetqty", "target quantity"],
-  targetAmount: ["target amount", "targetamount", "target value", "target amt"],
+  targetAmount: ["target amount", "targetamount", "target value", "target amt", "targetamount"],
   salesQty: ["sales qty", "salesqty", "sales quantity", "sold qty"],
-  salesAmount: ["sales amount", "salesamount", "sales value", "sales amt"],
+  salesAmount: ["sales amount", "salesamount", "sales value", "sales amt", "salesamount"],
   salesReturnQty: ["sales return qty", "salesreturnqty", "return qty", "return quantity"],
-  salesReturnAmount: ["sales return amount", "salesreturnamount", "return amount", "return value"],
+  salesReturnAmount: ["sales return amount", "salesreturnamount", "return amount", "return value", "sales returnamount"],
   netQty: ["net qty", "netqty", "net quantity"],
   netSales: ["net sales", "netsales", "net amount", "net value"],
-  achievement: ["achievement %", "achievement", "achievement%", "ach %", "ach%", "achivement", "ach %", "achive %"],
+  achievement: ["achievement %", "achievement", "achievement%", "ach %", "ach%", "achivement", "achive %", "achivement(%)", "achievement(%)"],
 }
 
 function cleanCell(v) {
@@ -26,9 +26,9 @@ function cleanCell(v) {
 
 function findHeaderRowIndex(rows) {
   const HEADER_KEYWORDS = [
-    "hq code", "material code", "target qty", "target amount",
-    "sales qty", "sales amount", "net sales", "net qty",
-    "achievement", "achivement", "sales return",
+    "hq code", "hqname", "hqcode", "target amount", "targetamount",
+    "sales amount", "salesamount", "net sales", "netsales",
+    "achievement", "achivement", "sales return", "sales returnamount",
   ]
   for (let i = 0; i < Math.min(rows.length, 100); i++) {
     const row = rows[i]
@@ -119,13 +119,14 @@ export async function importReport(req, res) {
     const headers = headerRow.map((c) => cleanCell(c)).filter(Boolean)
 
     const foundHqCode = findColumn(headers, "hqCode")
-    const foundMatCode = findColumn(headers, "materialCode")
 
-    if (!foundHqCode || !foundMatCode) {
+    if (!foundHqCode) {
       return res.status(400).json({
-        error: `Could not find required columns in header row. Found: ${JSON.stringify(headers)}`,
+        error: `Could not find required column "HQ Code" or "HQCode". Found: ${JSON.stringify(headers)}`,
       })
     }
+
+    const hasMaterialCode = findColumn(headers, "materialCode") != null
 
     const headerKeyIndex = (name) => {
       for (let i = 0; i < headerRow.length; i++) {
@@ -137,8 +138,8 @@ export async function importReport(req, res) {
 
     const hqCodeIdx = headerKeyIndex("hqCode")
     const hqNameIdx = headerKeyIndex("hqName")
-    const matCodeIdx = headerKeyIndex("materialCode")
-    const matNameIdx = headerKeyIndex("materialName")
+    const matCodeIdx = hasMaterialCode ? headerKeyIndex("materialCode") : -1
+    const matNameIdx = hasMaterialCode ? headerKeyIndex("materialName") : -1
     const targetQtyIdx = headerKeyIndex("targetQty")
     const targetAmtIdx = headerKeyIndex("targetAmount")
     const salesQtyIdx = headerKeyIndex("salesQty")
@@ -156,15 +157,15 @@ export async function importReport(req, res) {
       if (!Array.isArray(row)) continue
 
       const hqCode = cleanCell(row[hqCodeIdx])
-      const materialCode = cleanCell(row[matCodeIdx])
+      if (!hqCode) continue
 
-      if (!hqCode || !materialCode) continue
+      const materialCode = hasMaterialCode ? cleanCell(row[matCodeIdx]) : "ALL"
 
       docs.push({
         hqCode,
         hqName: hqNameIdx >= 0 ? cleanCell(row[hqNameIdx]) : "",
         materialCode,
-        materialName: matNameIdx >= 0 ? cleanCell(row[matNameIdx]) : "",
+        materialName: matNameIdx >= 0 ? cleanCell(row[matNameIdx]) : "All Products",
         targetQty: targetQtyIdx >= 0 ? cleanNum(row[targetQtyIdx]) : 0,
         targetAmount: targetAmtIdx >= 0 ? cleanNum(row[targetAmtIdx]) : 0,
         salesQty: salesQtyIdx >= 0 ? cleanNum(row[salesQtyIdx]) : 0,
