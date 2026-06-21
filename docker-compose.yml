@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: medrepos-db
+    environment:
+      POSTGRES_USER: medrepos
+      POSTGRES_PASSWORD: medrepos
+      POSTGRES_DB: medrepos
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
