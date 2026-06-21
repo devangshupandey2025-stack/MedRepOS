@@ -1,6 +1,40 @@
 import FFRReport from "../models/FFRReport.js"
 import XLSX from "xlsx"
 
+const COLUMN_ALIASES = {
+  hqCode: ["hq code", "hqcode", "headquarters code", "head office code"],
+  hqName: ["hq name", "hqname", "headquarters name", "head office name"],
+  materialCode: ["material code", "materialcode", "product code", "item code", "sku"],
+  materialName: ["material name", "materialname", "product name", "item name"],
+  targetQty: ["target qty", "targetqty", "target quantity"],
+  targetAmount: ["target amount", "targetamount", "target value", "target amt"],
+  salesQty: ["sales qty", "salesqty", "sales quantity", "sold qty"],
+  salesAmount: ["sales amount", "salesamount", "sales value", "sales amt"],
+  salesReturnQty: ["sales return qty", "salesreturnqty", "return qty", "return quantity"],
+  salesReturnAmount: ["sales return amount", "salesreturnamount", "return amount", "return value"],
+  netQty: ["net qty", "netqty", "net quantity"],
+  netSales: ["net sales", "netsales", "net amount", "net value"],
+  achievement: ["achievement %", "achievement", "achievement%", "ach %", "ach%", "achivement"],
+}
+
+function findColumn(row, field) {
+  const aliases = COLUMN_ALIASES[field]
+  if (!aliases) return null
+  for (const key of Object.keys(row)) {
+    const normalized = key.trim().toLowerCase().replace(/\s+/g, " ")
+    if (aliases.includes(normalized)) return key
+  }
+  return null
+}
+
+function cleanNum(v) {
+  if (v == null || v === "") return 0
+  if (typeof v === "number") return v
+  const str = String(v).replace(/[^0-9.\-]/g, "")
+  const n = parseFloat(str)
+  return isNaN(n) ? 0 : n
+}
+
 export async function importReport(req, res) {
   try {
     if (!req.file) {
@@ -12,44 +46,45 @@ export async function importReport(req, res) {
     const sheet = workbook.Sheets[sheetName]
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: null })
 
-    const cleanNum = (v) => {
-      if (v == null || v === "") return 0
-      if (typeof v === "number") return v
-      const str = String(v).replace(/[^0-9.\-]/g, "")
-      const n = parseFloat(str)
-      return isNaN(n) ? 0 : n
+    if (rows.length === 0) {
+      return res.status(400).json({ error: "File is empty" })
     }
 
-    const cleanPct = (v) => {
-      if (v == null || v === "") return 0
-      if (typeof v === "number") return v
-      const str = String(v).replace(/[^0-9.\-]/g, "")
-      const n = parseFloat(str)
-      return isNaN(n) ? 0 : n
+    const firstRow = rows[0]
+    const foundHqCode = findColumn(firstRow, "hqCode")
+    const foundMatCode = findColumn(firstRow, "materialCode")
+
+    if (!foundHqCode || !foundMatCode) {
+      const actualCols = Object.keys(firstRow).map((k) => JSON.stringify(k.trim())).join(", ")
+      return res.status(400).json({
+        error: `Could not find required columns. Expected columns like "HQ Code" and "Material Code". Found columns: ${actualCols}`,
+      })
     }
+
+    const col = (field) => findColumn(firstRow, field)
 
     const docs = []
 
     for (const row of rows) {
-      const hqCode = String(row["HQ Code"] ?? row["hqCode"] ?? "").trim()
-      const materialCode = String(row["Material Code"] ?? row["materialCode"] ?? "").trim()
+      const hqCode = String(row[foundHqCode] ?? "").trim()
+      const materialCode = String(row[foundMatCode] ?? "").trim()
 
       if (!hqCode || !materialCode) continue
 
       docs.push({
         hqCode,
-        hqName: String(row["HQ Name"] ?? row["hqName"] ?? "").trim(),
+        hqName: String(row[col("hqName")] ?? "").trim(),
         materialCode,
-        materialName: String(row["Material Name"] ?? row["materialName"] ?? "").trim(),
-        targetQty: cleanNum(row["Target Qty"] ?? row["targetQty"]),
-        targetAmount: cleanNum(row["Target Amount"] ?? row["targetAmount"]),
-        salesQty: cleanNum(row["Sales Qty"] ?? row["salesQty"]),
-        salesAmount: cleanNum(row["Sales Amount"] ?? row["salesAmount"]),
-        salesReturnQty: cleanNum(row["Sales Return Qty"] ?? row["salesReturnQty"]),
-        salesReturnAmount: cleanNum(row["Sales Return Amount"] ?? row["salesReturnAmount"]),
-        netQty: cleanNum(row["Net Qty"] ?? row["netQty"]),
-        netSales: cleanNum(row["Net Sales"] ?? row["netSales"]),
-        achievement: cleanPct(row["Achievement %"] ?? row["achievement"]),
+        materialName: String(row[col("materialName")] ?? "").trim(),
+        targetQty: cleanNum(row[col("targetQty")]),
+        targetAmount: cleanNum(row[col("targetAmount")]),
+        salesQty: cleanNum(row[col("salesQty")]),
+        salesAmount: cleanNum(row[col("salesAmount")]),
+        salesReturnQty: cleanNum(row[col("salesReturnQty")]),
+        salesReturnAmount: cleanNum(row[col("salesReturnAmount")]),
+        netQty: cleanNum(row[col("netQty")]),
+        netSales: cleanNum(row[col("netSales")]),
+        achievement: cleanNum(row[col("achievement")]),
         importedAt: new Date(),
         uploadedBy: req.user?._id,
       })
