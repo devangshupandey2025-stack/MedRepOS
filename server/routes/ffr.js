@@ -8,6 +8,10 @@ import {
   getHQPerformance,
   getProductPerformance,
   getAchievementAnalysis,
+  listImports,
+  getHQDetail,
+  getProductDetail,
+  getVariance,
 } from "../controllers/ffr.js"
 
 const router = Router()
@@ -34,9 +38,13 @@ const upload = multer({
 router.use(requireAuth)
 
 router.post("/import", authorize("admin", "manager"), upload.single("file"), importReport)
+router.get("/imports", authorize("admin", "manager"), listImports)
 router.get("/overview", authorize("admin", "manager"), getOverview)
 router.get("/hq-performance", authorize("admin", "manager"), getHQPerformance)
 router.get("/product-performance", authorize("admin", "manager"), getProductPerformance)
 router.get("/achievement-analysis", authorize("admin", "manager"), getAchievementAnalysis)
+router.get("/variance", authorize("admin", "manager"), getVariance)
+router.get("/hq/:hqCode", authorize("admin", "manager"), getHQDetail)
+router.get("/product/:materialCode", authorize("admin", "manager"), getProductDetail)
 
 export default router

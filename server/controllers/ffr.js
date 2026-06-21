@@ -1,4 +1,6 @@
+import mongoose from "mongoose"
 import FFRReport from "../models/FFRReport.js"
+import FFRImport from "../models/FFRImport.js"
 import XLSX from "xlsx"
 
 const COLUMN_ALIASES = {
@@ -68,6 +70,19 @@ function cleanNum(v) {
   const str = String(v).replace(/[^0-9.\-]/g, "")
   const n = parseFloat(str)
   return isNaN(n) ? 0 : n
+}
+
+function cleanAchievement(v) {
+  if (v == null || v === "") return 0
+  if (typeof v === "number") {
+    if (v > 0 && v <= 1) return v * 100
+    return v
+  }
+  const str = String(v).replace(/[^0-9.\-]/g, "")
+  const n = parseFloat(str)
+  if (isNaN(n)) return 0
+  if (n > 0 && n <= 1) return n * 100
+  return n
 }
 
 export async function importReport(req, res) {
@@ -155,7 +170,7 @@ export async function importReport(req, res) {
         salesReturnAmount: srAmtIdx >= 0 ? cleanNum(row[srAmtIdx]) : 0,
         netQty: netQtyIdx >= 0 ? cleanNum(row[netQtyIdx]) : 0,
         netSales: netSalesIdx >= 0 ? cleanNum(row[netSalesIdx]) : 0,
-        achievement: achIdx >= 0 ? cleanNum(row[achIdx]) : 0,
+        achievement: achIdx >= 0 ? cleanAchievement(row[achIdx]) : 0,
         importedAt: new Date(),
         uploadedBy: req.user?._id,
       })
@@ -167,9 +182,22 @@ export async function importReport(req, res) {
 
     const result = await FFRReport.insertMany(docs, { ordered: false })
 
+    const importRecord = await FFRImport.create({
+      fileName: req.file.originalname,
+      recordsCount: result.length,
+      importedAt: new Date(),
+      uploadedBy: req.user?._id,
+    })
+
+    await FFRReport.updateMany(
+      { _id: { $in: result.map((d) => d._id) } },
+      { $set: { importBatchId: importRecord._id } }
+    )
+
     res.json({
       success: true,
       recordsImported: result.length,
+      importBatchId: importRecord._id,
     })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -178,7 +206,9 @@ export async function importReport(req, res) {
 
 export async function getOverview(req, res) {
   try {
+    const match = buildMatchStage(req)
     const [result] = await FFRReport.aggregate([
+      match,
       {
         $group: {
           _id: null,
@@ -220,7 +250,9 @@ export async function getOverview(req, res) {
 
 export async function getHQPerformance(req, res) {
   try {
+    const match = buildMatchStage(req)
     const result = await FFRReport.aggregate([
+      match,
       {
         $group: {
           _id: { hqCode: "$hqCode", hqName: "$hqName" },
@@ -253,8 +285,10 @@ export async function getHQPerformance(req, res) {
 
 export async function getProductPerformance(req, res) {
   try {
+    const match = buildMatchStage(req)
     const [top, bottom] = await Promise.all([
       FFRReport.aggregate([
+        match,
         {
           $group: {
             _id: { materialCode: "$materialCode", materialName: "$materialName" },
@@ -279,6 +313,7 @@ export async function getProductPerformance(req, res) {
         { $limit: 10 },
       ]),
       FFRReport.aggregate([
+        match,
         {
           $group: {
             _id: { materialCode: "$materialCode", materialName: "$materialName" },
@@ -310,9 +345,274 @@ export async function getProductPerformance(req, res) {
   }
 }
 
+function buildMatchStage(req) {
+  const { importBatchId } = req.query
+  if (importBatchId && importBatchId !== "all") {
+    return { $match: { importBatchId: new mongoose.Types.ObjectId(importBatchId) } }
+  }
+  return { $match: {} }
+}
+
+export async function listImports(req, res) {
+  try {
+    const imports = await FFRImport.find()
+      .sort({ importedAt: -1 })
+      .limit(50)
+      .populate("uploadedBy", "name")
+    res.json(imports)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export async function getHQDetail(req, res) {
+  try {
+    const { hqCode } = req.params
+    const match = buildMatchStage(req)
+
+    const products = await FFRReport.aggregate([
+      match,
+      { $match: { hqCode } },
+      {
+        $group: {
+          _id: { materialCode: "$materialCode", materialName: "$materialName" },
+          totalNetSales: { $sum: "$netSales" },
+          totalTargetAmount: { $sum: "$targetAmount" },
+          totalSalesAmount: { $sum: "$salesAmount" },
+          avgAchievement: { $avg: "$achievement" },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          materialCode: "$_id.materialCode",
+          materialName: "$_id.materialName",
+          totalNetSales: 1,
+          totalTargetAmount: 1,
+          totalSalesAmount: 1,
+          avgAchievement: { $round: ["$avgAchievement", 2] },
+          count: 1,
+        },
+      },
+      { $sort: { totalNetSales: -1 } },
+    ])
+
+    const [summary] = await FFRReport.aggregate([
+      match,
+      { $match: { hqCode } },
+      {
+        $group: {
+          _id: null,
+          totalTargetAmount: { $sum: "$targetAmount" },
+          totalSalesAmount: { $sum: "$salesAmount" },
+          totalNetSales: { $sum: "$netSales" },
+          avgAchievement: { $avg: "$achievement" },
+          productCount: { $addToSet: "$materialCode" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          totalTargetAmount: 1,
+          totalSalesAmount: 1,
+          totalNetSales: 1,
+          avgAchievement: { $round: ["$avgAchievement", 2] },
+          productCount: { $size: "$productCount" },
+        },
+      },
+    ])
+
+    const hqInfo = await FFRReport.findOne({ hqCode }).select("hqCode hqName").lean()
+
+    res.json({
+      hqCode: hqInfo?.hqCode || hqCode,
+      hqName: hqInfo?.hqName || hqCode,
+      summary: summary || {
+        totalTargetAmount: 0, totalSalesAmount: 0, totalNetSales: 0,
+        avgAchievement: 0, productCount: 0,
+      },
+      products,
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export async function getProductDetail(req, res) {
+  try {
+    const { materialCode } = req.params
+    const match = buildMatchStage(req)
+
+    const hqData = await FFRReport.aggregate([
+      match,
+      { $match: { materialCode } },
+      {
+        $group: {
+          _id: { hqCode: "$hqCode", hqName: "$hqName" },
+          totalNetSales: { $sum: "$netSales" },
+          totalTargetAmount: { $sum: "$targetAmount" },
+          totalSalesAmount: { $sum: "$salesAmount" },
+          avgAchievement: { $avg: "$achievement" },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          hqCode: "$_id.hqCode",
+          hqName: "$_id.hqName",
+          totalNetSales: 1,
+          totalTargetAmount: 1,
+          totalSalesAmount: 1,
+          avgAchievement: { $round: ["$avgAchievement", 2] },
+          count: 1,
+        },
+      },
+      { $sort: { totalNetSales: -1 } },
+    ])
+
+    const [summary] = await FFRReport.aggregate([
+      match,
+      { $match: { materialCode } },
+      {
+        $group: {
+          _id: null,
+          totalTargetAmount: { $sum: "$targetAmount" },
+          totalSalesAmount: { $sum: "$salesAmount" },
+          totalNetSales: { $sum: "$netSales" },
+          avgAchievement: { $avg: "$achievement" },
+          hqCount: { $addToSet: "$hqCode" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          totalTargetAmount: 1,
+          totalSalesAmount: 1,
+          totalNetSales: 1,
+          avgAchievement: { $round: ["$avgAchievement", 2] },
+          hqCount: { $size: "$hqCount" },
+        },
+      },
+    ])
+
+    const productInfo = await FFRReport.findOne({ materialCode }).select("materialCode materialName").lean()
+
+    res.json({
+      materialCode: productInfo?.materialCode || materialCode,
+      materialName: productInfo?.materialName || materialCode,
+      summary: summary || {
+        totalTargetAmount: 0, totalSalesAmount: 0, totalNetSales: 0,
+        avgAchievement: 0, hqCount: 0,
+      },
+      hqData,
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export async function getVariance(req, res) {
+  try {
+    const match = buildMatchStage(req)
+
+    const [products, hqs] = await Promise.all([
+      FFRReport.aggregate([
+        match,
+        {
+          $group: {
+            _id: { materialCode: "$materialCode", materialName: "$materialName" },
+            totalTargetAmount: { $sum: "$targetAmount" },
+            totalNetSales: { $sum: "$netSales" },
+            avgAchievement: { $avg: "$achievement" },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            materialCode: "$_id.materialCode",
+            materialName: "$_id.materialName",
+            totalTargetAmount: 1,
+            totalNetSales: 1,
+            variance: { $subtract: ["$totalNetSales", "$totalTargetAmount"] },
+            variancePct: {
+              $cond: [
+                { $gt: ["$totalTargetAmount", 0] },
+                {
+                  $round: [
+                    {
+                      $multiply: [
+                        { $divide: [{ $subtract: ["$totalNetSales", "$totalTargetAmount"] }, "$totalTargetAmount"] },
+                        100,
+                      ],
+                    },
+                    2,
+                  ],
+                },
+                0,
+              ],
+            },
+            avgAchievement: { $round: ["$avgAchievement", 2] },
+          },
+        },
+        { $sort: { variance: 1 } },
+        { $limit: 10 },
+      ]),
+      FFRReport.aggregate([
+        match,
+        {
+          $group: {
+            _id: { hqCode: "$hqCode", hqName: "$hqName" },
+            totalTargetAmount: { $sum: "$targetAmount" },
+            totalNetSales: { $sum: "$netSales" },
+            avgAchievement: { $avg: "$achievement" },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            hqCode: "$_id.hqCode",
+            hqName: "$_id.hqName",
+            totalTargetAmount: 1,
+            totalNetSales: 1,
+            variance: { $subtract: ["$totalNetSales", "$totalTargetAmount"] },
+            variancePct: {
+              $cond: [
+                { $gt: ["$totalTargetAmount", 0] },
+                {
+                  $round: [
+                    {
+                      $multiply: [
+                        { $divide: [{ $subtract: ["$totalNetSales", "$totalTargetAmount"] }, "$totalTargetAmount"] },
+                        100,
+                      ],
+                    },
+                    2,
+                  ],
+                },
+                0,
+              ],
+            },
+            avgAchievement: { $round: ["$avgAchievement", 2] },
+          },
+        },
+        { $sort: { variance: 1 } },
+        { $limit: 10 },
+      ]),
+    ])
+
+    res.json({ products, hqs })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 export async function getAchievementAnalysis(req, res) {
   try {
+    const match = buildMatchStage(req)
     const [result] = await FFRReport.aggregate([
+      match,
       {
         $group: {
           _id: null,

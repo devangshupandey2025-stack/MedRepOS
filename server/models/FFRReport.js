@@ -17,6 +17,7 @@ const ffrReportSchema = new mongoose.Schema(
     achievement: { type: Number, default: 0 },
     importedAt: { type: Date, default: Date.now },
     uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    importBatchId: { type: mongoose.Schema.Types.ObjectId, ref: "FFRImport", index: true },
   },
   { timestamps: true }
 )

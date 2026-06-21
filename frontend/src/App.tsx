@@ -10,6 +10,8 @@ import NotificationsPage from "./pages/NotificationsPage"
 import AnalyticsPage from "./pages/AnalyticsPage"
 import FFRDashboard from "./pages/ffr/FFRDashboard"
 import FFRUpload from "./pages/ffr/FFRUpload"
+import HQDetail from "./pages/ffr/HQDetail"
+import ProductDetail from "./pages/ffr/ProductDetail"
 
 export default function App() {
   const { isLoaded, isSignedIn } = useUser()
@@ -50,6 +52,8 @@ export default function App() {
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="ffr" element={<FFRDashboard />} />
         <Route path="ffr/upload" element={<FFRUpload />} />
+        <Route path="ffr/hq/:hqCode" element={<HQDetail />} />
+        <Route path="ffr/product/:materialCode" element={<ProductDetail />} />
       </Route>
     </Routes>
   )
