@@ -16,7 +16,7 @@ const COLUMN_ALIASES = {
   salesReturnAmount: ["sales return amount", "salesreturnamount", "return amount", "return value"],
   netQty: ["net qty", "netqty", "net quantity"],
   netSales: ["net sales", "netsales", "net amount", "net value"],
-  achievement: ["achievement %", "achievement", "achievement%", "ach %", "ach%", "achivement"],
+  achievement: ["achievement %", "achievement", "achievement%", "ach %", "ach%", "achivement", "ach %", "achive %"],
 }
 
 function cleanCell(v) {
@@ -25,7 +25,7 @@ function cleanCell(v) {
 }
 
 function findHeaderRowIndex(rows) {
-  for (let i = 0; i < Math.min(rows.length, 20); i++) {
+  for (let i = 0; i < Math.min(rows.length, 100); i++) {
     const row = rows[i]
     if (!Array.isArray(row)) continue
     const combined = row
@@ -36,8 +36,12 @@ function findHeaderRowIndex(rows) {
       combined.includes("hq code") ||
       combined.includes("material code") ||
       combined.includes("target qty") ||
+      combined.includes("target amount") ||
       combined.includes("sales qty") ||
-      combined.includes("achievement")
+      combined.includes("sales amount") ||
+      combined.includes("net sales") ||
+      combined.includes("achievement") ||
+      combined.includes("achivement")
     ) {
       return i
     }
@@ -104,11 +108,14 @@ export async function importReport(req, res) {
 
     if (headerIndex === -1) {
       const preview = raw
-        .slice(0, 3)
-        .map((r, idx) => `Row ${idx}: [${(r || []).slice(0, 5).map((c) => JSON.stringify(c)).join(", ")}${(r || []).length > 5 ? ", ..." : ""}]`)
-        .join("; ")
+        .slice(0, 15)
+        .map((r, idx) => {
+          const cells = (r || []).slice(0, 8).filter((c) => c != null && String(c).trim() !== "")
+          return `Row ${idx}: ${JSON.stringify(cells)}`
+        })
+        .join("\n")
       return res.status(400).json({
-        error: `Could not find header row with expected columns (e.g. "HQ Code", "Material Code"). First rows: ${preview}`,
+        error: `Could not find header row with expected columns (e.g. "HQ Code", "Material Code"). Scanned first 100 rows. Non-empty cells in first 15 rows:\n${preview}`,
       })
     }
 
