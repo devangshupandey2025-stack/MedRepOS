@@ -6,11 +6,15 @@ const router = Router()
 
 router.post("/users/sync", requireAuth, async (req, res) => {
   try {
-    const { name, email } = req.body
+    const { name, email, role } = req.body
 
     let user = await User.findOne({ clerkId: req.clerkUserId })
 
     if (user) {
+      if (role && user.role !== role) {
+        user.role = role
+        await user.save()
+      }
       return res.json({ user, created: false })
     }
 
@@ -18,7 +22,7 @@ router.post("/users/sync", requireAuth, async (req, res) => {
       clerkId: req.clerkUserId,
       name: name || "User",
       email: email || "",
-      role: "rep",
+      role: role || "rep",
     })
 
     res.status(201).json({ user, created: true })

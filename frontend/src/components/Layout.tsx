@@ -46,6 +46,7 @@ export default function Layout() {
         const res = await api.post("/users/sync", {
           name: user.fullName,
           email: user.primaryEmailAddress?.emailAddress,
+          role: user.publicMetadata?.role || "rep",
         })
         setUser(res.data.user)
       } catch {
