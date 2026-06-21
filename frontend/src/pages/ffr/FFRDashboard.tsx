@@ -1,5 +1,8 @@
+import { useNavigate } from "react-router-dom"
+import { Upload } from "lucide-react"
 import { useFFROverview, useHQPerformance, useProductPerformance, useAchievementAnalysis } from "../../hooks/ffr/useFFR"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
+import { Button } from "../../components/ui/button"
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, Legend,
@@ -11,6 +14,7 @@ const formatCurrency = (n: number) =>
 const PIE_COLORS = ["#ef4444", "#f59e0b", "#22c55e", "#3b82f6"]
 
 export default function FFRDashboard() {
+  const navigate = useNavigate()
   const { data: overview, isLoading: ovLoading, isError: ovError } = useFFROverview()
   const { data: hqData, isLoading: hqLoading } = useHQPerformance()
   const { data: productData, isLoading: prodLoading } = useProductPerformance()
@@ -26,8 +30,12 @@ export default function FFRDashboard() {
 
   if (ovError) {
     return (
-      <div className="flex items-center justify-center h-64 text-destructive">
-        Failed to load FFR data. Upload a report first.
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <p className="text-destructive">Failed to load FFR data. Upload a report first.</p>
+        <Button onClick={() => navigate("/ffr/upload")}>
+          <Upload className="h-4 w-4 mr-2" />
+          Upload Report
+        </Button>
       </div>
     )
   }
@@ -49,11 +57,17 @@ export default function FFRDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">FFR Insights</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Pharmaceutical sales performance dashboard
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">FFR Insights</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Pharmaceutical sales performance dashboard
+          </p>
+        </div>
+        <Button onClick={() => navigate("/ffr/upload")}>
+          <Upload className="h-4 w-4 mr-2" />
+          Upload Report
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
